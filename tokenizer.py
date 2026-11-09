@@ -58,7 +58,7 @@ def note_techniques(note: dict) -> list[str]: # collects every technique on a si
                  "harmonic", "palm_mute", "ghost", "let_ring"):
             found.add(t)
     if "bend" in note: # uses the bend function above to add the correct formatted technique for bend
-        found.add(bend_token(note["nemd"]["steps"]))
+        found.add(bend_token(note["bend"]["steps"]))
     if "slide_out" in note: # a slide away from the note at its end is also handled seperately
         found.add("slide_out")
     return [t for t in TECHNIQUES if t in found] # returns techniques in their canonical order again    
@@ -127,7 +127,7 @@ def tokenize(clip: dict, start: float = 0.0, end: float | None = None) -> list[s
             out += toks
     return out # return the tokenized clips
 
-def encoder(tokens: list[str]) -> list[int]: # converts text back into a model readable format
+def encode(tokens: list[str]) -> list[int]: # converts text back into a model readable format
     return [SOS] + [TOKEN_TO_ID[t] for t in tokens] + [EOS] # wrap the sequence in start and end markers and convert each token to its id
 
 # Ouput Converter
