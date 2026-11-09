@@ -141,3 +141,55 @@ def decode(ids: list[int]) -> list[str]: # convert ids back into token text
             continue
         out.appen(VOCAB[i]) # lookup vocab for ids
     return out # return the token text
+
+def detokenize(tokens: list[str], start: float = 0.0) -> dict: # reads the tokens to rebuild the note
+    notes, beats, downbeats = [], [], [] # what the function returns
+    time, strum, techs, string = None, None, [], None # defined memory for function
+    for tok in tokens:
+        if tok.startswith("time_"): # sets the time and clears memory
+            time = start + int(tok[5:]) * TIME_STEP # sets the time
+            strum, techs, string = None, [], None # clears the memory
+        elif time is None: # ignores anything before to prevent model output deteriation
+            continue
+        elif tok in ("beat", "downbeat"): # record a beat or downbeat if present
+            beats.append(time) # write a beat
+            if tok == "downbeat":
+                downbeats.append(time) # write a downbeat
+        elif tok in ("strum_down", "strum_up"): # defines the following notes to a strumming group
+            strum, techs, string = tok, [], None # defined group
+        elif tok.startswith("tech_"): # remembers the technique for the next note
+            techs.append(tok[5:])
+        elif tok.startswith("string_"): # remembers the string
+            string = int(tok[7:])
+        elif tok.startswith("fret_") and string is not None: # crash preventative measure which ignores malformed ouput
+            fret = None if tok == "fret_x" else int(tok[5:]) # if no fret is detected it is assigned a safe value
+            note = {"onset": round(time, 3), "string": string, "fret": fret, "techniques": list(techs) + ([strum] if strum else [])} # builds a singular note comprised of its time, string, fret, and technique
+            if fret is None: # crash guard
+                note["techniques"].append("dead") 
+            notes.append(note)
+            techs, string = [], None # clears the memory before detokenizing the next note, but keeps the strum, since more notes in the same strum may follow
+    return {"notes": notes, "beats": beats, "downbeats": downbeats}
+
+# Safety Check
+
+def round_trip_errors(clip: dict) -> list[str]: # Makes sure the tokenizer hasn't lost anything of importance
+    back = detokenize(tokenize(clip))
+    got = [(round(n["onset"] / TIME_STEP), n["string"], n["fret"]) for n in back["notes"]]
+    used = [False] * len(got)
+    errors = []
+    for note in clip["notes"]:
+        t = note["onset"] - note.get("strum_offset_ms", 0.0) / 1000
+        if t >= min(MAX_SECONDS, clip["duration_s"]):
+            continue
+        fret = None if "dead" in note["techniques"] else note["fret"]
+        step = t / TIME_STEP
+        match = next((i for i, g in enumerate(got) if not used[i]
+                      and g[1] == note["string"] and g[2] == fret
+                      and abs(g[0] - step) <= 1.5), None)
+        if match is None:
+            errors.append(f"lost note: string {note['string']} fret {fret} at {t:.3f} s")
+        else:
+            used[match] = True
+    if not all(used):
+        errors.append(f"{used.count(False)} extra notes")
+    return errors
