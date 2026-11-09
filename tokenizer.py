@@ -62,3 +62,12 @@ def note_techniques(note: dict) -> list[str]: # collects every technique on a si
     if "slide_out" in note: # a slide away from the note at its end is also handled seperately
         found.add("slide_out")
     return [t for t in TECHNIQUES if t in found] # returns techniques in their canonical order again    
+
+def note_tokens(note: dict) -> list[str]: # build the tokens for a singular note which colleects the technique, string, and fret values together
+    toks = [f"tech_{t}" for t in note_techniques(note)] # technique tokens are first in the order
+    toks.append(f"string_{note['string']}") # then the string tokens
+    if "dead" in note["techniques"]:
+        toks.append("fret_x") # dead notes get fret_x
+    else:  
+        toks.append(f"fret_{note['fret']}") # otherwise its a real fret
+    return toks # returns a singular notes tokens
