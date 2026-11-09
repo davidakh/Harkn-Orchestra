@@ -76,3 +76,15 @@ def note_tokens(note: dict) -> list[str]: # build the tokens for a singular note
 
 def time_index(t: float, start: float) -> int: # converts time in seconds to a time token
     return int(round((t - start) / TIME_STEP)) # time since the window began divided by 10, rounded. 
+
+def group_strums(strum_notes: list) -> list: # find which notes belong to the same strum
+    groups = [] # each strum includes its direction and notes
+    for direction, nominal, note in sorted(strum_notes, key=lambda m: (m[0], m[1])): # consume notes based on direction and time
+        last = groups[-1] if groups else None # the current group or strum
+        if (last and last[0] == direction # join the group only based of the direction
+                and nominal - last[1][0][1] <= STRUM_GROUP_S # checks if the notes are within 2 ms of each other
+                and note["string"] not in {m[2]["string"] for m in last[1]}): # makes sure that the string is not already in the group
+            last[1].append((direction, nominal, note)) # either adds it to the current group or creates a new one
+        else:
+            groups.append((direction, [(direction, nominal, note)])) # if note is not in a strum group then its left alone
+    return groups # returns the notes either in groups of not
