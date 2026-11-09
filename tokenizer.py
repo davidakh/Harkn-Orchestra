@@ -44,5 +44,12 @@ TOKEN_TO_ID = {tok: i for i, tok in enumerate(VOCAB)} # lookup for text to id
 PAD, SOS, EOS = TOKEN_TO_ID["<pad>"], TOKEN_TO_ID["<sos>"], TOKEN_TO_ID["<eos>"] # saves the special token ids under readable names not simply 1, 2, 3
 VOCAB_SIZE = len(VOCAB) # 1053 possible token types
 
+# Token Technique Definer
+
+def bend_token(step: float) -> str: # a function that turns the bend amount into a token
+    options = {0.5: "bend_half", 1.0: "bend_full", 1.5: "bend_1.5"} # bend amount and type
+    nearest = min(options, key=lambda s: abs(s - step)) # round incompatible amounts to the closest option
+    return options[nearest] # returns the bend token rounded to a possible option
+
 
 
