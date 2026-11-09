@@ -51,5 +51,14 @@ def bend_token(step: float) -> str: # a function that turns the bend amount into
     nearest = min(options, key=lambda s: abs(s - step)) # round incompatible amounts to the closest option
     return options[nearest] # returns the bend token rounded to a possible option
 
-
-
+def note_techniques(note: dict) -> list[str]: # collects every technique on a singular note in order
+    found = set() # ignores duplicates
+    for t in note["techniques"]: # keep the techniques that are used in the note. strum, bend, and dead are handles else where
+        if t in ("hammer_on", "pull_off", "slide", "release", "vibrato",
+                 "harmonic", "palm_mute", "ghost", "let_ring"):
+            found.add(t)
+    if "bend" in note: # uses the bend function above to add the correct formatted technique for bend
+        found.add(bend_token(note["nemd"]["steps"]))
+    if "slide_out" in note: # a slide away from the note at its end is also handled seperately
+        found.add("slide_out")
+    return [t for t in TECHNIQUES if t in found] # returns techniques in their canonical order again    
