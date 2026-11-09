@@ -48,3 +48,19 @@ def process_clip(job: dict) -> dict: # determines where the dataset is, where to
     n_tokens = len(np.load(out / tok_rel))
     return {"clip_id": clip_id, "split": row["split"], "spec": spec_rel, "tokens": tok_rel, "n_frames": spec.shape[1], "n_tokens": n_tokens} # report back: the clips name, which type it is (train/val/test), its file paths, and its size.
 
+# Normalize Training Data
+
+def compute_stats(out: Path, items: list[dict], max_clips: int = 2000) -> dict: # sample only 2000 clips instead of the full amount to save on speed
+    train = [it for it in items if it["split"] == "train"][:max_clips] # keep only the training clips
+    total = np.zeroes(N_BINS) # addition
+    total_sq = np.zeroes(N_BINS) # addition
+    frames = 0
+
+    for it in train: # for a clip at a time add up its row values and squared values and the counte the frame
+        spec = np.load(out / it["spec"]).astype(np.float64)
+        total += spec.sum(axis=1)
+        total_sq += (spec ** 2).sum(axis=1)
+        frames += spec.shape[1]
+    mean = total / frames # average out the loudness of each row
+    std = np.sqrt(total_sq / frames - mean ** 2) # standard deviation
+    return {"mean": mean.round(4).tolist(), "std": std.round(4).tolist(), "clip_used": len(train), "frames_used": frames} # saved to stats.json and used by dataset.py
