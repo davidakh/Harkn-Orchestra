@@ -71,3 +71,8 @@ def note_tokens(note: dict) -> list[str]: # build the tokens for a singular note
     else:  
         toks.append(f"fret_{note['fret']}") # otherwise its a real fret
     return toks # returns a singular notes tokens
+
+# Strum Catcher
+
+def time_index(t: float, start: float) -> int: # converts time in seconds to a time token
+    return int(round((t - start) / TIME_STEP)) # time since the window began divided by 10, rounded. 
