@@ -64,3 +64,47 @@ def compute_stats(out: Path, items: list[dict], max_clips: int = 2000) -> dict: 
     mean = total / frames # average out the loudness of each row
     std = np.sqrt(total_sq / frames - mean ** 2) # standard deviation
     return {"mean": mean.round(4).tolist(), "std": std.round(4).tolist(), "clip_used": len(train), "frames_used": frames} # saved to stats.json and used by dataset.py
+
+# Main Run Loop
+
+def main(): # the main loop
+    p = argparse.ArgumentParser(description="Precompute spectrograms + tokens for Electro Mini.") # sets up terminal options
+    p.add_argument("--data", required=True, help="dataset folder from Electro Synth (has index.csv)") # where the dataset is and where it should go
+    p.add_argument("--out", required=True, help="where to save the prepared files") # where the dataset is and where it should go
+    p.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 1)) # how many CPU cores is available on the system
+    p.add_argument("--limit", type=int, default=0, help="only the first N clips (for a quick test)") # quick test run of a singular clip
+    args = p.parse_args()
+
+    src, out = Path(args.data), Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    with open(src / "index.csv", newline="") as f: # loads index.csv
+        rows = list(csv.DictReader(f)) # reads index.csv row by row
+    if args.limit:
+        rows = rows[: args.limit]
+    jobs = [{"src": str(src), "out": str(out), "row": r} for r in rows] # one job per clip
+
+    started = time.time()
+    items = []
+    with Pool(args.workers) as pool: # start of multithread process
+        for i, item in enumerate(pool.imap_unordered(process_clip, jobs, chunksize=8), start=1): # prints progress every 1000 clips
+            items.append(item)
+            if i % 1000 == 0 or i == len(jobs):
+                rate = i / (time.time() - started)
+                print(f"{i}/{len(jobs)} clips  ({rate:.0f} clips/s)")
+
+    items.sort(key=lambda it: it["clip_id"]) # puts back in correct order
+    with open(out / "manifest.csv", "w", newline="") as f: # creates manifest.csv
+        writer = csv.DictWriter(f, fieldnames=list(items[0].keys()))
+        writer.writeheader()
+        writer.writerows(items)
+
+    stats = compute_stats(out, items) # save normalization and other statistics in stats.json
+    (out / "stats.json").write_text(json.dumps(stats))
+
+    longest = max(items, key=lambda it: it["n_tokens"])
+    print(f"done in {time.time() - started:.0f} s") # reports back usage
+    print(f"clips: {len(items)}  longest token sequence: {longest['n_tokens']}" f"most frames: {max(it['n_frames'] for it in items)}")  # reports back usage
+
+
+if __name__ == "__main__": # required to run
+    main()
