@@ -173,23 +173,46 @@ def detokenize(tokens: list[str], start: float = 0.0) -> dict: # reads the token
 # Safety Check
 
 def round_trip_errors(clip: dict) -> list[str]: # Makes sure the tokenizer hasn't lost anything of importance
-    back = detokenize(tokenize(clip))
-    got = [(round(n["onset"] / TIME_STEP), n["string"], n["fret"]) for n in back["notes"]]
-    used = [False] * len(got)
-    errors = []
-    for note in clip["notes"]:
-        t = note["onset"] - note.get("strum_offset_ms", 0.0) / 1000
+    back = detokenize(tokenize(clip)) # checks the whole stack from the beginning
+    got = [(round(n["onset"] / TIME_STEP), n["string"], n["fret"]) for n in back["notes"]] # formats the returned notes
+    used = [False] * len(got) # checks which notes have been processed and matched
+    errors = [] # defined errors
+    for note in clip["notes"]: # checks every original note
+        t = note["onset"] - note.get("strum_offset_ms", 0.0) / 1000 # checks that each note is in its intended time
         if t >= min(MAX_SECONDS, clip["duration_s"]):
             continue
-        fret = None if "dead" in note["techniques"] else note["fret"]
+        fret = None if "dead" in note["techniques"] else note["fret"] # checks that the fret is given
         step = t / TIME_STEP
-        match = next((i for i, g in enumerate(got) if not used[i]
+        match = next((i for i, g in enumerate(got) if not used[i] # determine the precision and use of the tokens
                       and g[1] == note["string"] and g[2] == fret
                       and abs(g[0] - step) <= 1.5), None)
         if match is None:
-            errors.append(f"lost note: string {note['string']} fret {fret} at {t:.3f} s")
+            errors.append(f"lost note: string {note['string']} fret {fret} at {t:.3f} s") # a note was not processed
         else:
             used[match] = True
     if not all(used):
-        errors.append(f"{used.count(False)} extra notes")
+        errors.append(f"{used.count(False)} extra notes") # extra notes appeared
     return errors
+
+# CLI
+
+if __name__ == "__main__":
+    import sys
+    files = []
+    for arg in sys.argv[1:]:
+        p = Path(arg)
+        files += sorted(p.rglob("*.json")) if p.is_dir() else [p]
+    lengths, failures = [], 0
+    for path in files:
+        clip = json.loads(path.read_text())
+        lengths.append(len(encode(tokenize(clip))))
+        errs = round_trip_errors(clip)
+        if errs:
+            failures += 1
+            print(path.name, errs[0])
+    lengths.sort()
+    print(f"vocab size: {VOCAB_SIZE}")
+    print(f"clips: {len(files)}, round-trip failures: {failures}")
+    if lengths:
+        pct = lambda p: lengths[min(len(lengths) - 1, int(p * len(lengths)))]
+        print(f"tokens per clip: median {pct(0.5)}, 95% {pct(0.95)}, max {lengths[-1]}")
