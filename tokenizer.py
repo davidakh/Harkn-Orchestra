@@ -72,7 +72,7 @@ def note_tokens(note: dict) -> list[str]: # build the tokens for a singular note
         toks.append(f"fret_{note['fret']}") # otherwise its a real fret
     return toks # returns a singular notes tokens
 
-# Strum Catcher
+# Organizer
 
 def time_index(t: float, start: float) -> int: # converts time in seconds to a time token
     return int(round((t - start) / TIME_STEP)) # time since the window began divided by 10, rounded. 
@@ -88,3 +88,41 @@ def group_strums(strum_notes: list) -> list: # find which notes belong to the sa
         else:
             groups.append((direction, [(direction, nominal, note)])) # if note is not in a strum group then its left alone
     return groups # returns the notes either in groups of not
+
+def tokenize(clip: dict, start: float = 0.0, end: float | None = None) -> list[str]: # allows the tokenizer to tokenize 10ms part of the input
+    if end is None:
+        end = min(start + MAX_SECONDS, clip["duration_s"]) # if there's no end, stop at the end of the clip
+    events = defaultdict(list) # creates the clips
+
+    downbeats = {round(t, 4) for t in clip["downbeats"]} # categorizes the type of beat
+    for t in clip["beats"]: # go through every beat
+        if start <= t < end:
+            kind = "downbeat" if round(t, 4) in downbeats else "beat" # names the beat type
+            events[time_index(t, start)].append((0, 0, [kind])) # place it in the correct clip
+
+    strum_notes = []
+    for note in clip["notes"]: # go through every note within the clip
+        if "strum_offset_ms" in note: # asks whether this note is part of a strum
+            nominal = note["onset"] - note["strum_offset_ms"] / 1000 # figures out when the strum started
+            direction = "strum_down" if "strum_down" in note["techniques"] else "strum_up" # figures out the direction of the strum
+            strum_notes.append((direction, nominal, note)) # combines the direction, start, and notes
+        elif start <= note["onset"] < end: # a non-strummed note is automatically added to the clip
+            events[time_index(note["onset"], start)].append( # time index of the note
+                (1, -note["string"], note_tokens(note))) # organizes the strings
+
+    for direction, members in group_strums(strum_notes): # handles the strummed notes
+        nominal = sum(m[1] for m in members) / len(members) # strum duration is the average of the notes' time
+        if not (start <= nominal < end): # skip strums that do not fit into this category
+            continue
+        members.sort(key=lambda m: -m[2]["string"]) # organize the notes within the strum low e is first and high e is last. 
+        toks = [direction] # writes either strum up or down and the notes string and fret
+        for _, _, note in members:
+            toks += note_tokens(note) # writes either strum up or down and the notes string and fret
+        events[time_index(nominal, start)].append((1, -members[0][2]["string"], toks)) # combine a singular strum into a clip
+
+    out = [] # the empty clips we'll fill
+    for step in sorted(events): # visit the clips in timely order, with empty boxes skipped automatically
+        out.append(f"time_{min(step, N_TIME - 1)}") # writes the clips time
+        for _, _, toks in sorted(events[step], key=lambda e: (e[0], e[1])): # writes what is within the box, beat first, then notes
+            out += toks
+    return out # return the tokenized clips
