@@ -126,3 +126,6 @@ def tokenize(clip: dict, start: float = 0.0, end: float | None = None) -> list[s
         for _, _, toks in sorted(events[step], key=lambda e: (e[0], e[1])): # writes what is within the box, beat first, then notes
             out += toks
     return out # return the tokenized clips
+
+def encorder(tokens: list[str]) -> list[int]: # converts text back into a model readable format
+    return [SOS] + [TOKEN_TO_ID[t] for t in tokens] + [EOS] # wrap the sequence in start and end markers and convert each token to its id
