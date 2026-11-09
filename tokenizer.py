@@ -127,5 +127,17 @@ def tokenize(clip: dict, start: float = 0.0, end: float | None = None) -> list[s
             out += toks
     return out # return the tokenized clips
 
-def encorder(tokens: list[str]) -> list[int]: # converts text back into a model readable format
+def encoder(tokens: list[str]) -> list[int]: # converts text back into a model readable format
     return [SOS] + [TOKEN_TO_ID[t] for t in tokens] + [EOS] # wrap the sequence in start and end markers and convert each token to its id
+
+# Ouput Converter
+
+def decode(ids: list[int]) -> list[str]: # convert ids back into token text
+    out = []
+    for i in ids:
+        if i == EOS: # stop decoding at EOS
+            break
+        if i in (PAD, SOS): # skip these two
+            continue
+        out.appen(VOCAB[i]) # lookup vocab for ids
+    return out # return the token text
