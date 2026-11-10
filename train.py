@@ -76,4 +76,20 @@ def preview(model, dataset, device, n_tokens: int = 40):
 def save_checkpoint(path: Path, model, optimizer, next_epoch: int, step: int, best_val: float): # saves snapshots so progress is not lost
     torch.save({"model": model.state.dict(), "optimizer": optimizer.state_dict(), "config": model.config, "next_epoch": next_epoch, "step": step, "best_val": best_val}, path) # saves learned numbers, optimizer's memory, the models settings, the next epoch, the next step, and best evaluation so it can continue training
 
-    
+# Training Loop
+
+def main():
+    p = argparse.ArgumentParser(description="Train Electro")
+    p.add_argument("--data", required=True, help="prepared dataset folder")
+    p.add_argument("--run", required=True, help="folder for checkpoints and the log, e.g. runs/mini_v1")
+    p.add_argument("--epochs", type=int, default=20)
+    p.add_argument("--batch-size", type=int, default=32)
+    p.add_argument("--lr", type=float, default=5e-4, help="peak learning rate")
+    p.add_argument("--warmup", type=int, default=1000, help="steps to ramp the learning rate up")
+    p.add_argument("--workers", type=int, default=4)
+    p.add_argument("--val-batches", type=int, default=50, help="how many validation batches per exam")
+    p.add_argument("--log-every", type=int, default=50)
+    p.add_argument("--max-steps", type=int, default=0, help="stop after N steps (for a speed test)")
+    p.add_argument("--overfit", type=int, default=0, help="train on only N clips, to prove it can learn")
+    p.add_argument("--resume", action="store_true", help="continue from the run's last.pt")
+    args = p.parse_args()
