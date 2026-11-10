@@ -32,6 +32,13 @@ def learning_rate(step: int, peak: float, warmup: int, total: int) -> float: # h
 def to_device(batch: dict, device: torch.device) -> dict: # move batches onto the GPU if available
     return {name: value.to(device) for name, value in batch.items()}
 
+def gpu_memory_gb(device: torch.device) -> float:
+    if device.type == "mps":
+        return torch.mps.driver_allocated_memory() / 1e9
+    if device.type == "cuda":
+        return torch.cuda.memory_reserved() / 1e9
+    return 0.0
+
 # Measuring Loss
 
 def compute_loss(model, batch, loss_fn):
@@ -83,10 +90,10 @@ def main():
     p.add_argument("--data", required=True, help="prepared dataset folder")
     p.add_argument("--run", required=True, help="folder for checkpoints and the log, e.g. runs/mini_v1")
     p.add_argument("--epochs", type=int, default=20)
-    p.add_argument("--batch-size", type=int, default=32)
+    p.add_argument("--batch-tokens", type=int, default=8192, help="tokens per batch; lower it to use less memory")
     p.add_argument("--lr", type=float, default=5e-4, help="peak learning rate")
     p.add_argument("--warmup", type=int, default=1000, help="steps to ramp the learning rate up")
-    p.add_argument("--workers", type=int, default=4)
+    p.add_argument("--workers", type=int, default=2)
     p.add_argument("--val-batches", type=int, default=50, help="how many validation batches per exam")
     p.add_argument("--log-every", type=int, default=50)
     p.add_argument("--max-steps", type=int, default=0, help="stop after N steps (for a speed test)")
@@ -100,12 +107,8 @@ def main():
     run.mkdir(parents=True, exist_ok=True)
 
     # The data
-    batch_size = min(args.batch_size, args.overfit) if args.overfit else args.batch_size
-    train_loader = make_loader(args.data, "train", batch_size=batch_size, workers=args.workers)
-    val_loader = make_loader(args.data, "val", batch_size=batch_size, workers=args.workers)
-    if args.overfit:
-        train_loader.dataset.items = train_loader.dataset.items[: args.overfit]
-        train_loader.dataset.augment = False
+    train_loader = make_loader(args.data, "train", args.batch_tokens, args.workers, limit=args.overfit)
+    val_loader = make_loader(args.data, "val", args.batch_tokens, args.workers)
     steps_per_epoch = len(train_loader)
     total_steps = args.max_steps or args.epochs * steps_per_epoch
 
@@ -123,12 +126,12 @@ def main():
 
     n_params = sum(p.numel() for p in model.parameters())
     print(f"device: {device}  parameters: {n_params / 1e6:.1f} M  train clips: {len(train_loader.dataset)}")
-    print(f"batch size: {batch_size}  steps per epoch: {steps_per_epoch}  total steps: {total_steps}")
+    print(f"tokens per batch: {args.batch_tokens}  steps per epoch: {steps_per_epoch}  total steps: {total_steps}")
     (run / "args.json").write_text(json.dumps(vars(args), indent=2)) # saves settings of the run
 
     model.train() # train model with variation enabled
     epoch = start_epoch # loads epoch
-    running, since_log, timer = torch.zeros((), device=device), 0, time.time() # calculate totals for progress markers
+    running, since_log, seen, timer = torch.zeros((), device=device), 0, 0, time.time() # calculate totals for progress markers
     try:
         for epoch in range(start_epoch, args.epochs): # one pass through all the training clips
             epoch_total, epoch_steps = torch.zeros((), device=device), 0
@@ -157,43 +160,45 @@ def main():
                 epoch_total += loss.detach()
                 step += 1
                 since_log += 1 
+                seen += batch["spec"].shape[0]
                 epoch_steps += 1 
 
                 if step % args.log_every == 0: # every 50 steps it prints the average loss, learning late, and speed
                     avg = running.item() / since_log
-                    speed = since_log * batch_size / (time.time() - timer)
-                    print(f"epoch {epoch}   step {step}/{total_steps}   loss {avg:.3f}  " f"lr {lr:.2e}   {speed:.0f} clips/s")
-                    running, since_log, timer = torch.zeros((), device=device), 0, time.time()
+                    speed = seen / (time.time() - timer)
+                    print(f"epoch {epoch}  step {step}/{total_steps}  loss {avg:.3f}  "
+                          f"lr {lr:.2e}  {speed:.0f} clips/s  {gpu_memory_gb(device):.1f} GB")
+                    running, since_log, seen, timer = torch.zeros((), device=device), 0, 0, time.time()
 
                 if args.max_steps and step >= args.max_steps:
                     break
 
-                train_loss = epoch_total.item() / max(1, epoch_steps)
+            train_loss = epoch_total.item() / max(1, epoch_steps)
 
-                if args.overfit:
-                    print(f"epoch {epoch} done  train loss {train_loss:.3f}")
-                else:
-                    val_loss, val_acc = evaluate(model, val_loader, loss_fn, device, args.val_batches)
-                    print(f"epoch {epoch} done  train loss {train_loss:.3f}  "
-                        f"val loss {val_loss:.3f}  val accuracy {val_acc:.1%}")
-                    preview(model, val_loader.dataset, device)
+            if args.overfit:
+                print(f"epoch {epoch} done  train loss {train_loss:.3f}")
+            else:
+                val_loss, val_acc = evaluate(model, val_loader, loss_fn, device, args.val_batches)
+                print(f"epoch {epoch} done  train loss {train_loss:.3f}  "
+                    f"val loss {val_loss:.3f}  val accuracy {val_acc:.1%}")
+                preview(model, val_loader.dataset, device)
 
-                    new_log = not (run / "log.csv").exists()
-                    with open(run / "log.csv", "a", newline="") as f:
-                        writer = csv.writer(f)
-                        if new_log:
-                            writer.writerow(["epoch", "step", "train_loss", "val_loss", "val_accuracy"])
-                        writer.writerow([epoch, step, round(train_loss, 4), round(val_loss, 4), round(val_acc, 4)])
+                new_log = not (run / "log.csv").exists()
+                with open(run / "log.csv", "a", newline="") as f:
+                    writer = csv.writer(f)
+                    if new_log:
+                        writer.writerow(["epoch", "step", "train_loss", "val_loss", "val_accuracy"])
+                    writer.writerow([epoch, step, round(train_loss, 4), round(val_loss, 4), round(val_acc, 4)])
 
-                    if val_loss < best_val:
-                        best_val = val_loss
-                        save_checkpoint(run / "best.pt", model, optimizer, epoch + 1, step, best_val)
-                        print(f"  new best, saved {run / 'best.pt'}")
+                if val_loss < best_val:
+                    best_val = val_loss
+                    save_checkpoint(run / "best.pt", model, optimizer, epoch + 1, step, best_val)
+                    print(f"  new best, saved {run / 'best.pt'}")
 
-                save_checkpoint(run / "last.pt", model, optimizer, epoch + 1, step, best_val)
+            save_checkpoint(run / "last.pt", model, optimizer, epoch + 1, step, best_val)
 
-                if args.max_steps and step >= args.max_steps:
-                    break
+            if args.max_steps and step >= args.max_steps:
+                break
 
     except KeyboardInterrupt:
         save_checkpoint(run / "last.pt", model, optimizer, epoch, step, best_val)
