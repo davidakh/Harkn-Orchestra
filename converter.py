@@ -48,7 +48,7 @@ def process_clip(job: dict) -> dict: # determines where the dataset is, where to
     n_tokens = len(np.load(out / tok_rel))
     return {"clip_id": clip_id, "split": row["split"], "spec": spec_rel, "tokens": tok_rel, "n_frames": spec.shape[1], "n_tokens": n_tokens} # report back: the clips name, which type it is (train/val/test), its file paths, and its size.
 
-# Normalize Training Data
+# Normalizing the Training Data
 
 def compute_stats(out: Path, items: list[dict], max_clips: int = 2000) -> dict: # sample only 2000 clips instead of the full amount to save on speed
     train = [it for it in items if it["split"] == "train"][:max_clips] # keep only the training clips
