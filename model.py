@@ -19,16 +19,16 @@ class ElectroMini(nn.Module): # model class
         self.config = dict(d_model=d_model, heads=heads, enc_layers=enc_layers, dec_layers=dec_layers, ff=ff, dropout=dropout) # remembers the settings
 
         self.front = nn.Sequential(
-            nn.Conv1d(N_BINS, d_model, kernal_size=3, padding=1), # tells the model to read 252 rows and 3 columns at a time
+            nn.Conv1d(N_BINS, d_model, kernel_size=3, padding=1), # tells the model to read 252 rows and 3 columns at a time
             nn.GELU(), # non-linearity
-            nn.Conv1d(d_model, d_model, kernal_size=3, padding=1), # gets the model to see an additional 115 ms of context
+            nn.Conv1d(d_model, d_model, kernel_size=3, padding=1), # gets the model to see an additional 115 ms of context
             nn.GELU(), # non-linearity
         )
         self.frame_pos = nn.Embedding(MAX_FRAMES, d_model) # postion tag
 
     # Encoder Layers
 
-        enc_layer = nn.TransformerEncoderLayer(d_model, heads, ff, dropout, activation="gelu", batch_first="TRUE", norm_first="TRUE") # singular layer from PyTorch, with the same non-linearity as front-end, given in batches, and rescale numbers pre-training to make training more stable
+        enc_layer = nn.TransformerEncoderLayer(d_model, heads, ff, dropout, activation="gelu", batch_first=True, norm_first=True) # singular layer from PyTorch, with the same non-linearity as front-end, given in batches, and rescale numbers pre-training to make training more stable
         self.encoder = nn.TransformerEncoder(enc_layer, enc_layers, norm=nn.LayerNorm(d_model), enable_nested_tensor=False) # Copies the layer above 4 times and turns off unsupported Mac features
 
     # Decoder Layers
@@ -36,7 +36,7 @@ class ElectroMini(nn.Module): # model class
         self.token_emb = nn.Embedding(tokenizer.VOCAB_SIZE, d_model, padding_idx=tokenizer.PAD) # a lookup table that ignores padding
         self.token_pos = nn.Embedding(MAX_TOKENS, d_model) # position tags for tokens
         dec_layer = nn.TransformerDecoderLayer(d_model, heads, ff, dropout, activation="gelu", batch_first=True, norm_first=True) # singular decode layer
-        self.decoder = nn.TransformerDecoder(dec_layer, dec_layers, norm=nn.LayerNrom(d_model)) # duplicates the decode layer thrice
+        self.decoder = nn.TransformerDecoder(dec_layer, dec_layers, norm=nn.LayerNorm(d_model)) # duplicates the decode layer thrice
 
     # Probability Ouput
 
@@ -67,21 +67,21 @@ class ElectroMini(nn.Module): # model class
 
 # Generate Loop
 
-@torch.no_grad() # disable learning
-def generate(self, spec, frame_mask, max_tokens=MAX_TOKENS): # generates tab
-    memory = self.encode(spec, frame_mask) # listens once to the clip
-    batch = spec.shape[0]
-    tokens = torch.full((batch, 1), tokenizer.SOS, dtype=torch.long, device=spec.device) # wraps output
-    done = torch.zeros(batch, dtype=torch.bool, device=spec.device) # tracks which clips are finished
-    for _ in range(max_tokens - 1): # loop for writing until limit
-        scores = self.decode(tokens, memory, frame_mask) # scores every possible next tokens
-        next_token = scores[:, -1].argmax(dim=-1) # greedy decoding
-        next_token[done] = tokenizer.PAD # clips that are finished get padding
-        tokens = torch.cat([tokens, next_token[:, None]], dim=1) # adds the predicted token to the end
-        done |= next_token == tokenizer.EOS # once output is finished wrap in end of sequence token
-        if done.all(): # stop early if every clip is finished
-            break
-    return tokens # return predicted tokens
+    @torch.no_grad() # disable learning
+    def generate(self, spec, frame_mask, max_tokens=MAX_TOKENS): # generates tab
+        memory = self.encode(spec, frame_mask) # listens once to the clip
+        batch = spec.shape[0]
+        tokens = torch.full((batch, 1), tokenizer.SOS, dtype=torch.long, device=spec.device) # wraps output
+        done = torch.zeros(batch, dtype=torch.bool, device=spec.device) # tracks which clips are finished
+        for _ in range(max_tokens - 1): # loop for writing until limit
+            scores = self.decode(tokens, memory, frame_mask) # scores every possible next tokens
+            next_token = scores[:, -1].argmax(dim=-1) # greedy decoding
+            next_token[done] = tokenizer.PAD # clips that are finished get padding
+            tokens = torch.cat([tokens, next_token[:, None]], dim=1) # adds the predicted token to the end
+            done |= next_token == tokenizer.EOS # once output is finished wrap in end of sequence token
+            if done.all(): # stop early if every clip is finished
+                break
+        return tokens # return predicted tokens
 
 # Test
 
