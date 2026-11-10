@@ -17,7 +17,7 @@ from model import Electro # imports the model from model.py
 # Helpers
 
 def pick_device() -> torch.device:
-    if torch.backend.mps.is_available(): # checks if mac specific metal training backend is available
+    if torch.backends.mps.is_available(): # checks if mac specific metal training backend is available
         return torch.device("mps") # uses mps if available
     if torch.cuda.is_available(): # checks if nvidia specifc cuda backend is available
         return torch.device("cuda") # uses cuda if available
@@ -44,7 +44,7 @@ def compute_loss(model, batch, loss_fn):
 # Validation
 
 @torch.no_grad() # not for training
-def evaluation(model, loader, loss_fn, device, max_batches: int):
+def evaluate(model, loader, loss_fn, device, max_batches: int):
     model.eval() # switches off dropout or variation so that the exam is the same every time
     total_loss, total_correct, total_tokens = 0.0, 0, 0
     for i, batch in enumerate(loader):
@@ -54,7 +54,7 @@ def evaluation(model, loader, loss_fn, device, max_batches: int):
         loss, correct, n = compute_loss(model, batch, loss_fn)
         total_loss += loss.item() * n.item() # weigh each batch by how many real tokens it included aka non-padding tokens
         total_correct += correct.item()
-        total_tokens += n.items()
+        total_tokens += n.item()
     model.train() # switchb dropout back on before training continues
     return total_loss / total_tokens, total_correct / total_tokens
 
@@ -74,7 +74,7 @@ def preview(model, dataset, device, n_tokens: int = 40):
 # Saving and Loading
 
 def save_checkpoint(path: Path, model, optimizer, next_epoch: int, step: int, best_val: float): # saves snapshots so progress is not lost
-    torch.save({"model": model.state.dict(), "optimizer": optimizer.state_dict(), "config": model.config, "next_epoch": next_epoch, "step": step, "best_val": best_val}, path) # saves learned numbers, optimizer's memory, the models settings, the next epoch, the next step, and best evaluation so it can continue training
+    torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(), "config": model.config, "next_epoch": next_epoch, "step": step, "best_val": best_val}, path) # saves learned numbers, optimizer's memory, the models settings, the next epoch, the next step, and best evaluation so it can continue training
 
 # Training Loop
 
@@ -93,6 +93,21 @@ def main():
     p.add_argument("--overfit", type=int, default=0, help="train on only N clips, to prove it can learn")
     p.add_argument("--resume", action="store_true", help="continue from the run's last.pt")
     args = p.parse_args()
+
+    torch.manual_seed(0)
+    device = pick_device()
+    run = Path(args.run)
+    run.mkdir(parents=True, exist_ok=True)
+
+    # The data
+    batch_size = min(args.batch_size, args.overfit) if args.overfit else args.batch_size
+    train_loader = make_loader(args.data, "train", batch_size=batch_size, workers=args.workers)
+    val_loader = make_loader(args.data, "val", batch_size=batch_size, workers=args.workers)
+    if args.overfit:
+        train_loader.dataset.items = train_loader.dataset.items[: args.overfit]
+        train_loader.dataset.augment = False
+    steps_per_epoch = len(train_loader)
+    total_steps = args.max_steps or args.epochs * steps_per_epoch
 
     model = Electro().to(device) # build the model and send it to the gpu
     loss_fn = nn.CrossEntropyLoss(ignore_index=tokenizer.PAD) # loss without padding
@@ -119,7 +134,7 @@ def main():
             epoch_total, epoch_steps = torch.zeros((), device=device), 0
 
             for batch in train_loader: # one batch at a time aka one step
-                lr = learing_rate(step, args.lr, args.warmup, total_steps) # steps nudge amount
+                lr = learning_rate(step, args.lr, args.warmup, total_steps) # steps nudge amount
                 for group in optimizer.param_groups:
                     group["lr"] = lr
 
@@ -146,9 +161,50 @@ def main():
 
                 if step % args.log_every == 0: # every 50 steps it prints the average loss, learning late, and speed
                     avg = running.item() / since_log
-                    speed - since_log * batch_size / (time.time() - timer)
-                    print(f"epoch {epoch}   step {step}/{total_steps}   loss {avg:.3f}" f"lr {lr:.2e}   {speed:.0f} clips/s")
+                    speed = since_log * batch_size / (time.time() - timer)
+                    print(f"epoch {epoch}   step {step}/{total_steps}   loss {avg:.3f}  " f"lr {lr:.2e}   {speed:.0f} clips/s")
                     running, since_log, timer = torch.zeros((), device=device), 0, time.time()
 
                 if args.max_steps and step >= args.max_steps:
                     break
+
+                train_loss = epoch_total.item() / max(1, epoch_steps)
+
+                if args.overfit:
+                    print(f"epoch {epoch} done  train loss {train_loss:.3f}")
+                else:
+                    val_loss, val_acc = evaluate(model, val_loader, loss_fn, device, args.val_batches)
+                    print(f"epoch {epoch} done  train loss {train_loss:.3f}  "
+                        f"val loss {val_loss:.3f}  val accuracy {val_acc:.1%}")
+                    preview(model, val_loader.dataset, device)
+
+                    new_log = not (run / "log.csv").exists()
+                    with open(run / "log.csv", "a", newline="") as f:
+                        writer = csv.writer(f)
+                        if new_log:
+                            writer.writerow(["epoch", "step", "train_loss", "val_loss", "val_accuracy"])
+                        writer.writerow([epoch, step, round(train_loss, 4), round(val_loss, 4), round(val_acc, 4)])
+
+                    if val_loss < best_val:
+                        best_val = val_loss
+                        save_checkpoint(run / "best.pt", model, optimizer, epoch + 1, step, best_val)
+                        print(f"  new best, saved {run / 'best.pt'}")
+
+                save_checkpoint(run / "last.pt", model, optimizer, epoch + 1, step, best_val)
+
+                if args.max_steps and step >= args.max_steps:
+                    break
+
+    except KeyboardInterrupt:
+        save_checkpoint(run / "last.pt", model, optimizer, epoch, step, best_val)
+        print(f"\nstopped. Progress saved to {run / 'last.pt'}; run again with --resume to restart epoch {epoch}.")
+        return
+
+    if args.overfit:
+        print("memorization check, on a training clip:")
+        preview(model, train_loader.dataset, device)
+    print("done")
+
+
+if __name__ == "__main__":
+    main()
