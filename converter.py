@@ -23,7 +23,7 @@ BINS_PER_OCTAVE = 36 # 3 rows per semitone
 N_BINS = 7 * BINS_PER_OCTAVE # calculation for covering all of the notes which is 252
 
 def spectrogram(audio: np.ndarray) -> np.ndarray: # turns audio into an image
-    cqt = librosa.cqt(audio, sr=SAMPLE_RATE, hop_length=HOP, fmin=FMIN, n_bin=N_BINS, bins_per_octave=BINS_PER_OCTAVE) # does the math for how load each pitch at any given moment
+    cqt = librosa.cqt(audio, sr=SAMPLE_RATE, hop_length=HOP, fmin=FMIN, n_bins=N_BINS, bins_per_octave=BINS_PER_OCTAVE) # does the math for how load each pitch at any given moment
     db = librosa.amplitude_to_db(np.abs(cqt), ref=1.0, amin=1e-5, top_db=None) # converts loudness to decibles
     return db.astype(np.float16) # truncating the output to 16-bit as opposed to 32-bit with minor precision loss but smaller disk footprint
 
@@ -33,7 +33,7 @@ def process_clip(job: dict) -> dict: # determines where the dataset is, where to
     src, out, row = Path(job["src"]), Path(job["out"]), job["row"]
     clip_id, shard = row["clip_id"], row["shard"] # the clips name and folder
     spec_rel = f"{shard}/{clip_id}.spec.npy" # file
-    tok_rel = f"{shard}/{clip_id}.spec.npy" # file
+    tok_rel = f"{shard}/{clip_id}.tok.npy" # file
 
     if not ((out / spec_rel).exists() and (out / tok_rel).exists()): # skips completed clips
         (out / shard).mkdir(parents=True, exist_ok=True) # make the output folder if it doesn't already exist
@@ -52,8 +52,8 @@ def process_clip(job: dict) -> dict: # determines where the dataset is, where to
 
 def compute_stats(out: Path, items: list[dict], max_clips: int = 2000) -> dict: # sample only 2000 clips instead of the full amount to save on speed
     train = [it for it in items if it["split"] == "train"][:max_clips] # keep only the training clips
-    total = np.zeroes(N_BINS) # addition
-    total_sq = np.zeroes(N_BINS) # addition
+    total = np.zeros(N_BINS) # addition
+    total_sq = np.zeros(N_BINS) # addition
     frames = 0
 
     for it in train: # for a clip at a time add up its row values and squared values and the counte the frame
