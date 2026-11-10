@@ -9,7 +9,7 @@ from pathlib import Path # a simplier way of handling file paths
 
 # Tokenizer Definition
 
-TIME_STEP = 0.01 # a token is present every 10 ms
+TIME_STEP = 0.01 # a token ticker
 MAX_SECONDS = 10.0 # caps the length of a singular clip the tokenizer handles at any given
 N_TIME = int(round(MAX_SECONDS / TIME_STEP)) + 1 # calculates the amount of tokens that can exist within the 10 ms which is 1001
 MAX_FRET = 24 # highest fret the tokenizer can write to
@@ -139,7 +139,7 @@ def decode(ids: list[int]) -> list[str]: # convert ids back into token text
             break
         if i in (PAD, SOS): # skip these two
             continue
-        out.append(VOCAB[i]) # lookup vocab for ids
+        out.appen(VOCAB[i]) # lookup vocab for ids
     return out # return the token text
 
 def detokenize(tokens: list[str], start: float = 0.0) -> dict: # reads the tokens to rebuild the note

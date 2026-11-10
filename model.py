@@ -25,3 +25,20 @@ class ElectroMini(nn.Module): # model class
             nn.GELU(), # non-linearity
         )
         self.frame_pos = nn.Embedding(MAX_FRAMES, d_model) # postion tag
+
+        # Encoder Layers
+
+        enc_layer = nn.TransformerEncoderLayer(d_model, heads, ff, dropout, activation="gelu", batch_first="TRUE", norm_first="TRUE") # singular layer from PyTorch, with the same non-linearity as front-end, given in batches, and rescale numbers pre-training to make training more stable
+        self.encoder = nn.TransformerEncoder(enc_layer, enc_layers, norm=nn.LayerNorm(d_model), enable_nested_tensor=False) # Copies the layer above 4 times and turns off unsupported Mac features
+
+        # Decoder Layers
+
+        self.token_emb = nn.Embedding(tokenizer.VOCAB_SIZE, d_model, padding_idx=tokenizer.PAD) # a lookup table that ignores padding
+        self.token_pos = nn.Embedding(MAX_TOKENS, d_model) # position tags for tokens
+        dec_layer = nn.TransformerDecoderLayer(d_model, heads, ff, dropout, activation="gelu", batch_first=True, norm_first=True) # singular decode layer
+        self.decoder = nn.TransformerDecoder(dec_layer, dec_layers, norm=nn.LayerNrom(d_model)) # duplicates the decode layer thrice
+
+        # Probability Ouput
+
+        self.out = nn.Linear(d_model, tokenizer.VOCAB_SIZE) # turns the decoders output into 1053 scores one per token and the highest score is the next token
+
