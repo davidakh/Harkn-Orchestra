@@ -70,3 +70,10 @@ def preview(model, dataset, device, n_tokens: int = 40):
     model.train()
     print("  truth :", " ".join(tokenizer.decode(tokens.tolist())[: n_tokens - 1]))
     print("  model :", " ".join(tokenizer.decode(written)))
+
+# Saving and Loading
+
+def save_checkpoint(path: Path, model, optimizer, next_epoch: int, step: int, best_val: float): # saves snapshots so progress is not lost
+    torch.save({"model": model.state.dict(), "optimizer": optimizer.state_dict(), "config": model.config, "next_epoch": next_epoch, "step": step, "best_val": best_val}, path) # saves learned numbers, optimizer's memory, the models settings, the next epoch, the next step, and best evaluation so it can continue training
+
+    
