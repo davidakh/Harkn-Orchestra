@@ -65,6 +65,8 @@ class ElectroMini(nn.Module): # model class
         memory = self.encode(spec, frame_mask) # listens to a singular clip in its full
         return self.decode(decoder_input, memory, frame_mask) # write all predictions at once
 
+# Generate Loop
+
 @torch.no_grad() # disable learning
 def generate(self, spec, frame_mask, max_tokens=MAX_TOKENS): # generates tab
     memory = self.encode(spec, frame_mask) # listens once to the clip
@@ -80,3 +82,21 @@ def generate(self, spec, frame_mask, max_tokens=MAX_TOKENS): # generates tab
         if done.all(): # stop early if every clip is finished
             break
     return tokens # return predicted tokens
+
+# Test
+
+if __name__ == "__main__":
+    model = ElectroMini()
+    n_params = sum(p.numel() for p in model.parameters())
+    print(f"parameters: {n_params / 1e6:.1f} million")
+
+    spec = torch.randn(2, N_BINS, 431)
+    frame_mask = torch.ones(2, 431, dtype=torch.bool)
+    decoder_input = torch.randint(3, tokenizer.VOCAB_SIZE, (2, 50))
+    scores = model(spec, frame_mask, decoder_input)
+    print(f"input  spec {tuple(spec.shape)}  tokens {tuple(decoder_input.shape)}")
+    print(f"output scores {tuple(scores.shape)}  (one score per vocabulary token, at every position)")
+
+    model.eval()
+    written = model.generate(spec[:1], frame_mask[:1], max_tokens=10)
+    print("untrained model writes:", [tokenizer.VOCAB[i] for i in written[0].tolist()])
