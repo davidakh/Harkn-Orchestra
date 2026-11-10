@@ -42,3 +42,18 @@ def compute_loss(model, batch, loss_fn):
     return loss, correct, real.sum()
 
 # Validation
+
+@torch.no_grad() # not for training
+def evaluation(model, loader, loss_fn, device, max_batches: int):
+    model.eval() # switches off dropout or variation so that the exam is the same every time
+    total_loss, total_correct, total_tokens = 0.0, 0, 0
+    for i, batch in enumerate(loader):
+        if i == max_batches: # limit amount of batches for exam
+            break
+        batch = to_device(batch, device) 
+        loss, correct, n = compute_loss(model, batch, loss_fn)
+        total_loss += loss.item() * n.item() # weigh each batch by how many real tokens it included aka non-padding tokens
+        total_correct += correct.item()
+        total_tokens += n.items()
+    model.train() # switchb dropout back on before training continues
+    return total_loss / total_tokens, total_correct / total_tokens
