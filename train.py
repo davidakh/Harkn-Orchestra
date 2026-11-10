@@ -128,7 +128,7 @@ def main():
 
     model.train() # train model with variation enabled
     epoch = start_epoch # loads epoch
-    running, since_log, timer = torch.zeroes((), device=device), 0, time.time() # calculate totals for progress markers
+    running, since_log, timer = torch.zeros((), device=device), 0, time.time() # calculate totals for progress markers
     try:
         for epoch in range(start_epoch, args.epochs): # one pass through all the training clips
             epoch_total, epoch_steps = torch.zeros((), device=device), 0

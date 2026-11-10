@@ -13,7 +13,7 @@ MAX_TOKENS = 1024 # the most amount of tokens the model can write within a seque
 
 # Model
 
-class ElectroMini(nn.Module): # model class
+class Electro(nn.Module): # model class
     def __init__(self, d_model=256, heads=4, enc_layers=4, dec_layers=4, ff=1024, dropout=0.1): # d_model is the width or in simplier terms how much the model can say about each item, heads is the amount of signals that can be viewed at once, enc_layer and dec_layer is the amount of layers the encorder and decoder comprise of, ff is the size of the thinking neural net in the model, and dropout allows the model to work with audio it has never seen before.
         super().__init__()
         self.config = dict(d_model=d_model, heads=heads, enc_layers=enc_layers, dec_layers=dec_layers, ff=ff, dropout=dropout) # remembers the settings
@@ -86,7 +86,7 @@ class ElectroMini(nn.Module): # model class
 # Test
 
 if __name__ == "__main__":
-    model = ElectroMini()
+    model = Electro()
     n_params = sum(p.numel() for p in model.parameters())
     print(f"parameters: {n_params / 1e6:.1f} million")
 

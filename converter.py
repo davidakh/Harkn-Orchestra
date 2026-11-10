@@ -68,7 +68,7 @@ def compute_stats(out: Path, items: list[dict], max_clips: int = 2000) -> dict: 
 # Main Run Loop
 
 def main(): # the main loop
-    p = argparse.ArgumentParser(description="Precompute spectrograms + tokens for Electro Mini.") # sets up terminal options
+    p = argparse.ArgumentParser(description="Precompute spectrograms + tokens for Electro.") # sets up terminal options
     p.add_argument("--data", required=True, help="dataset folder from Electro Synth (has index.csv)") # where the dataset is and where it should go
     p.add_argument("--out", required=True, help="where to save the prepared files") # where the dataset is and where it should go
     p.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 1)) # how many CPU cores is available on the system
