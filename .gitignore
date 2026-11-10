@@ -1,0 +1,5 @@
+.venv/
+prepared/
+prepared_test/
+__pycache__/
+.DS_Store
