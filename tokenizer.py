@@ -199,20 +199,20 @@ def round_trip_errors(clip: dict) -> list[str]: # Makes sure the tokenizer hasn'
 if __name__ == "__main__":
     import sys
     files = []
-    for arg in sys.argv[1:]:
+    for arg in sys.argv[1:]: # accepts files or folders and looks for jsons inside
         p = Path(arg)
         files += sorted(p.rglob("*.json")) if p.is_dir() else [p]
     lengths, failures = [], 0
     for path in files:
         clip = json.loads(path.read_text())
-        lengths.append(len(encode(tokenize(clip))))
-        errs = round_trip_errors(clip)
+        lengths.append(len(encode(tokenize(clip)))) # measures each clip's token length
+        errs = round_trip_errors(clip) # checks itself every loop for errors
         if errs:
             failures += 1
             print(path.name, errs[0])
     lengths.sort()
-    print(f"vocab size: {VOCAB_SIZE}")
-    print(f"clips: {len(files)}, round-trip failures: {failures}")
+    print(f"vocab size: {VOCAB_SIZE}") # reports the output
+    print(f"clips: {len(files)}, round-trip failures: {failures}") # reports the output
     if lengths:
         pct = lambda p: lengths[min(len(lengths) - 1, int(p * len(lengths)))]
-        print(f"tokens per clip: median {pct(0.5)}, 95% {pct(0.95)}, max {lengths[-1]}")
+        print(f"tokens per clip: median {pct(0.5)}, 95% {pct(0.95)}, max {lengths[-1]}") # reports the output
