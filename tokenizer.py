@@ -139,7 +139,7 @@ def decode(ids: list[int]) -> list[str]: # convert ids back into token text
             break
         if i in (PAD, SOS): # skip these two
             continue
-        out.appen(VOCAB[i]) # lookup vocab for ids
+        out.append(VOCAB[i]) # lookup vocab for ids
     return out # return the token text
 
 def detokenize(tokens: list[str], start: float = 0.0) -> dict: # reads the tokens to rebuild the note
