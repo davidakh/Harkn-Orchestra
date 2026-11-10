@@ -93,3 +93,62 @@ def main():
     p.add_argument("--overfit", type=int, default=0, help="train on only N clips, to prove it can learn")
     p.add_argument("--resume", action="store_true", help="continue from the run's last.pt")
     args = p.parse_args()
+
+    model = Electro().to(device) # build the model and send it to the gpu
+    loss_fn = nn.CrossEntropyLoss(ignore_index=tokenizer.PAD) # loss without padding
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, betas=(0.9, 0.98), weight_decay=0.01) # nudges weights aka params, memory from original transformer paper, and anchors params to 0
+
+    start_epoch, step, best_val = 0, 0, float("inf")
+    if args.resume and (run / "last.pt").exists(): # load snapshot of restart
+        saved = torch.load(run / "last.pt", map_location=device)
+        model.load_state_dict(saved["model"])
+        optimizer.load_state_dict(saved["optimizer"])
+        start_epoch, step, best_val = saved["next_epoch"], saved["step"], saved["best_val"]
+        print(f"resumed from epoch {start_epoch}, step {step}") # prints restart specifics
+
+    n_params = sum(p.numel() for p in model.parameters())
+    print(f"device: {device}  parameters: {n_params / 1e6:.1f} M  train clips: {len(train_loader.dataset)}")
+    print(f"batch size: {batch_size}  steps per epoch: {steps_per_epoch}  total steps: {total_steps}")
+    (run / "args.json").write_text(json.dumps(vars(args), indent=2)) # saves settings of the run
+
+    model.train() # train model with variation enabled
+    epoch = start_epoch # loads epoch
+    running, since_log, timer = torch.zeroes((), device=device), 0, time.time() # calculate totals for progress markers
+    try:
+        for epoch in range(start_epoch, args.epochs): # one pass through all the training clips
+            epoch_total, epoch_steps = torch.zeros((), device=device), 0
+
+            for batch in train_loader: # one batch at a time aka one step
+                lr = learing_rate(step, args.lr, args.warmup, total_steps) # steps nudge amount
+                for group in optimizer.param_groups:
+                    group["lr"] = lr
+
+                # Forward Pass
+
+                batch = to_device(batch, device) # guesses by the model
+                loss, _, _ = compute_loss(model, batch, loss_fn) # score the guess
+
+                # Backpropagation
+
+                optimizer.zero_grad(set_to_none=True) # figures out which way to nudge weights
+                loss.backward() # backpropagation
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0) # scales gradients to match model
+
+                # Nudge Weights
+
+                optimizer.step() # use the data from back step to nudge weights
+
+                running += loss.detach() # add up the loss
+                epoch_total += loss.detach()
+                step += 1
+                since_log += 1 
+                epoch_steps += 1 
+
+                if step % args.log_every == 0: # every 50 steps it prints the average loss, learning late, and speed
+                    avg = running.item() / since_log
+                    speed - since_log * batch_size / (time.time() - timer)
+                    print(f"epoch {epoch}   step {step}/{total_steps}   loss {avg:.3f}" f"lr {lr:.2e}   {speed:.0f} clips/s")
+                    running, since_log, timer = torch.zeros((), device=device), 0, time.time()
+
+                if args.max_steps and step >= args.max_steps:
+                    break
