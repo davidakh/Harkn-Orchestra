@@ -57,3 +57,16 @@ def evaluation(model, loader, loss_fn, device, max_batches: int):
         total_tokens += n.items()
     model.train() # switchb dropout back on before training continues
     return total_loss / total_tokens, total_correct / total_tokens
+
+# Preview 
+
+@torch.no_grad()
+def preview(model, dataset, device, n_tokens: int = 40):
+    model.eval()
+    spec, tokens = dataset[0]
+    spec = spec[None].to(device)
+    frame_mask = torch.ones(1, spec.shape[2], dtype=torch.bool, device=device)
+    written = model.generate(spec, frame_mask, max_tokens=n_tokens)[0].tolist()
+    model.train()
+    print("  truth :", " ".join(tokenizer.decode(tokens.tolist())[: n_tokens - 1]))
+    print("  model :", " ".join(tokenizer.decode(written)))
