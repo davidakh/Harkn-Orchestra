@@ -18,7 +18,7 @@ import tokenizer # imports the tokenizer.py file
 
 SAMPLE_RATE = 22050 # synth saved audio at 22050 point of data a second
 HOP = 512 # every 512 points of data a snapshot is saved which becomes a column of the spectrogram
-FMIN = librose.note_to_hz("D2") # adds the note logic from librosa
+FMIN = librosa.note_to_hz("D2") # adds the note logic from librosa
 BINS_PER_OCTAVE = 36 # 3 rows per semitone
 N_BINS = 7 * BINS_PER_OCTAVE # calculation for covering all of the notes which is 252
 
