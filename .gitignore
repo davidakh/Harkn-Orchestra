@@ -2,4 +2,5 @@
 prepared/
 prepared_test/
 __pycache__/
+run/
 .DS_Store
