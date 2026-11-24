@@ -1,0 +1,4 @@
+mlx>=0.32        # on Linux use: mlx[cpu]
+librosa>=0.10
+numpy
+soundfile

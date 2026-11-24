@@ -1,0 +1,44 @@
+{
+  "model_name": "Harkn Orchestra",
+  "architecture": "conv front end + transformer encoder-decoder",
+  "framework": "mlx",
+  "parameters": 8685597,
+  "weights_dtype": "float32",
+  "d_model": 256,
+  "attention_heads": 4,
+  "encoder_layers": 4,
+  "decoder_layers": 4,
+  "feed_forward": 1024,
+  "dropout": 0.1,
+  "vocab_size": 1053,
+  "max_tokens": 1024,
+  "max_frames": 512,
+  "audio": {
+    "sample_rate": 22050,
+    "channels": 1,
+    "window_seconds": 10.0,
+    "features": "constant-Q transform, magnitude in dB",
+    "hop_length": 512,
+    "fmin": "D2",
+    "bins_per_octave": 36,
+    "n_bins": 252,
+    "normalization": "per-bin mean/std from spectrogram_stats.json"
+  },
+  "tokens": {
+    "time_step_seconds": 0.01,
+    "strings": [6, 5, 4, 3, 2, 1],
+    "max_fret": 24,
+    "tuning": "standard E A D G B e",
+    "techniques": ["hammer_on", "pull_off", "slide", "slide_out", "bend_half", "bend_full", "bend_1.5", "release", "vibrato", "harmonic", "palm_mute", "ghost", "let_ring"]
+  },
+  "training": {
+    "run": "mlx_v1",
+    "checkpoint": "best validation loss (epoch 33 of 60, step 76,989)",
+    "val_loss": 0.2835,
+    "precision": "mixed precision: fp16 math, fp32 master weights, dynamic loss scaling",
+    "optimizer_lr": 0.0005,
+    "warmup_steps": 1000,
+    "batch_tokens": 8192,
+    "hardware": "Mac Studio"
+  }
+}
